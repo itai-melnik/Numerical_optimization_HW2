@@ -78,67 +78,17 @@ class constrainedMinimizer:
                     x0: float) -> Tuple[np.ndarray, float]:
         
         
-       
-        
         #get augmented objective
         def aug_obj(x) -> FuncType:
                 
             #values of original objective
-            v0, g0, h0 = func(x)
+            f_val, g_val, H_val = func(x)
+            
+            #values of phi
+            phi, gphi, Hphi = self._log_barrier(x, ineq_constraints)
             
             
-            # ---- Log–barrier contribution ---------------------------------
-            # Each inequality constraint g_i(x) must satisfy g_i(x) ≤ 0.
-            # We use the scaled barrier  φ_t(x) = -(1 / self.t) * Σ log(-g_i(x)).
-            vals      = []   # g_i(x) values
-            grads     = []   # ∇g_i(x)
-            hess_list = []   # ∇²g_i(x)   (may be None)
-
-            for gfun in ineq_constraints:
-                g_val, g_grad, g_hess = gfun(x)
-                vals.append(g_val)
-                grads.append(g_grad)
-                # If the supplied constraint has no Hessian, treat it as zero.
-                if g_hess is None:
-                    g_hess = np.zeros((len(x), len(x)))
-                hess_list.append(g_hess)
-
-            vals = np.asarray(vals, dtype=float)
-
-            # If any constraint is violated (g_i(x) ≥ 0) we return +∞ so that
-            # the line‑search rejects this point.
-            if np.any(vals >= 0):
-                return np.inf, np.full_like(x, np.nan), np.full((len(x), len(x)), np.nan)
-
-            inv_t = 1.0 / self.t          # 1 / t  (barrier parameter scaling)
-
-            # scalar barrier term
-            v1 = -inv_t * np.sum(np.log(-vals))
-
-            # gradient of the barrier
-            g1 = inv_t * np.sum([grad / val for grad, val in zip(grads, vals)], axis=0)
-
-            # Hessian of the barrier
-            h1 = inv_t * np.sum(
-                [
-                    (np.outer(grad, grad) / (val ** 2) - hess / val)
-                    for grad, hess, val in zip(grads, hess_list, vals)
-                ],
-                axis=0,
-            )
-            
-            
-        
-            #values of augmented function 
-            
-            val = v0 + v1
-            
-            grad = g0 + g1
-            
-            hessian = h0 + h1
-            
-
-            return val, grad, hessian
+            return (f_val + phi, g_val + gphi, H_val + Hphi)
         
         
         bool_flag = False
@@ -169,38 +119,15 @@ class constrainedMinimizer:
                     bool_flag = True
                     break
                 
-                
-                #TODO create the matrix
-
-                KKT_mat = np.block([[h, eq_constraints_rhs.T],
-                                [eq_constraints_rhs, np.zeros((eq_constraints_rhs.shape[0], eq_constraints_rhs.shape[0]))]
-                        ])
-                
-                
-                
-                #TODO make sure shapes are correct 
-                zeros = np.zeros(eq_constraints_rhs.shape[0])
-                KKT_vec = np.concatenate([-g, zeros])
-        
-                
-                
-                #solve linear equation
-                
-                KKT_result = np.linalg.solve(KKT_mat,KKT_vec)
-                
-                #extract p and w (solutions)
-                #TODO fix
-                pk = KKT_result[:, :]
-                w = KKT_result[:, :]
+                #get pk (primal) and w (dual)
+                pk, w = self._solve_kkt(H=h, A=eq_constraints_mat, g=eq_constraints_rhs)
                 
             
                 #computer alpha_k
-                alpha = self.backtracking(x, f_val, g, pk)
-            
-
+                alpha = self.backtracking(self.x, f_val, g, pk)
+    
                 #update
                 x_new = self.x + alpha * pk
-
 
                 #store previous values for stopping termination conditions 
 
@@ -210,6 +137,8 @@ class constrainedMinimizer:
 
                 #x_(k+1) = x_new
                 self.x = x_new
+    
+            self.t = self.t * self.mu   # t -> ut 
 
               
         
@@ -224,6 +153,59 @@ class constrainedMinimizer:
             
     ### helper methods ###
     
+
+    def _solve_kkt(self,
+               H: np.ndarray,
+               A: np.ndarray,
+               g: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Solve the KKT system    [ H  Aᵀ ][ p ] = [ -g ]
+                                [ A   0 ][ w ]   [  0 ]
+        Returns search direction p and dual w.
+        """
+        zeros = np.zeros(A.shape[0])
+        KKT_mat   = np.block([[H, A.T],
+                        [A, np.zeros((A.shape[0], A.shape[0]))]])
+
+        rhs = np.concatenate([-g, zeros])
+        solution = np.linalg.solve(KKT_mat, rhs)
+        n = g.size
+        return solution[:n], solution[n:]
+    
+    
+    
+    def _log_barrier(self,
+                    x: np.ndarray,
+                    ineq_constraints: List[FuncType]
+                    ) -> Tuple[float, np.ndarray, np.ndarray]:
+        """
+        φ_t(x)   = -(1/t) Σ_i log(-g_i(x))
+        ∇φ_t(x)  =  (1/t) Σ_i ∇g_i(x) / g_i(x)
+        ∇²φ_t(x) =  (1/t) Σ_i [ ∇g_i ∇g_iᵀ / g_i²  –  ∇²g_i / g_i ]
+        """
+        vals, grads, hess_list = [], [], []
+
+        for gfun in ineq_constraints:
+            val, grad, hess = gfun(x)
+            if hess is None:
+                hess = np.zeros((len(x), len(x)))
+            vals.append(val); grads.append(grad); hess_list.append(hess)
+
+        vals = np.asarray(vals, dtype=float)
+
+        # Infeasible ⇒ +∞ so that line-search rejects
+        if np.any(vals >= 0):
+            return np.inf, np.full_like(x, np.nan), np.full((len(x), len(x)), np.nan)
+
+        inv_t = 1.0 / self.t
+        phi   = -inv_t * np.sum(np.log(-vals))
+        gphi  =  inv_t * sum(grad / val for grad, val in zip(grads, vals))
+        Hphi  =  inv_t * sum((np.outer(grad, grad) / (val ** 2) - hess / val)
+                            for grad, hess, val in zip(grads, hess_list, vals))
+
+        return phi, gphi, Hphi
+            
+        
     
     def _is_converged(self, k: int) -> bool:
         """check the stopping criteria"""
@@ -257,7 +239,7 @@ class constrainedMinimizer:
             
          
     
-    def backtracking(self, x, f_val, g, p) -> float:
+    def _backtracking(self, x, f_val, g, p) -> float:
         """ used to compute alpha (the step size)"""
         
         alpha = 1.0 #initial value
