@@ -55,9 +55,17 @@ class constrainedMinimizer:
 
     def interior_pt(self, func: FuncType,
                     ineq_constraints: List[FuncType],
-                    eq_constraints_mat: List[List[Callable]],
+                    eq_constraints_mat: np.ndarray,
                     eq_constraints_rhs: np.ndarray,
-                    x0: float) -> Tuple[np.ndarray, float]:
+                    x0: np.ndarray) -> Tuple[np.ndarray, float]:
+        
+        n = x0.size
+        if eq_constraints_mat is None:
+            A = np.empty((0, n))
+            b = np.empty((0,))
+        else:
+            A = np.asarray(eq_constraints_mat, dtype=float)
+            b = np.asarray(eq_constraints_rhs, dtype=float)
         
         #clear the history from previous runs
         self.history.clear() 
@@ -74,24 +82,30 @@ class constrainedMinimizer:
             return (f_val + phi, g_val + gphi, H_val + Hphi)
 
         bool_flag = False
-        m = len(ineq_constraints)  # number of inequality constraints
+     
+
+            
+       
         self.x = x0  # initial x
+        m = len(ineq_constraints)         # number of inequalities
 
+        outer_iterations = 0
         # outer iterations
-
         while (m/self.t >= self.epsilon):
-
+            outer_iterations += 1
+            
+            # only save history for outer iterations
+            f_val, g_val, _ = func(self.x)
+            self._save_history(outer_iterations, f_val, g_val)
+            
             # inner iterations
             for k in range(self.max_iter):
                 f_val, g, h = aug_obj(self.x)
 
-                # save current iteration
-                self._save_history(k, f_val, g)
-
-                # print to console:
-                print('iteration number:', k + 1)
-                print('current location 𝑥𝑖:', self.x)
-                print('current objective value 𝑓(𝑥𝑖 ):', f_val)
+                # # print to console:
+                # print('iteration number:', k + 1)
+                # print('current location 𝑥𝑖:', self.x)
+                # print('current objective value 𝑓(𝑥𝑖 ):', f_val)
 
                 # break if stopping criteria met
                 if self._is_converged(k):
@@ -100,10 +114,10 @@ class constrainedMinimizer:
 
                 # get pk (primal) and w (dual)
                 pk, w = self._solve_kkt(
-                    H=h, A=eq_constraints_mat, g=eq_constraints_rhs)
+                    H=h, A=A, g=g)
 
                 # computer alpha_k
-                alpha = self.backtracking(self.x, f_val, g, pk)
+                alpha = self._backtracking(self.x, f_val, g, pk, f=aug_obj)
 
                 # update
                 x_new = self.x + alpha * pk
@@ -116,7 +130,13 @@ class constrainedMinimizer:
                 # x_(k+1) = x_new
                 self.x = x_new
 
+        
             self.t = self.t * self.mu   # t -> ut
+            
+            
+        # save history of last iteration
+        f_val, g_val, _ = func(self.x)
+        self._save_history(outer_iterations, f_val, g_val)
 
         # returns final location, final value and bool flag
         return self.x, self.history[-1].f, bool_flag
@@ -132,14 +152,23 @@ class constrainedMinimizer:
                                 [ A   0 ][ w ]   [  0 ]
         Returns search direction p and dual w.
         """
-        zeros = np.zeros(A.shape[0])
-        KKT_mat = np.block([[H, A.T],
-                            [A, np.zeros((A.shape[0], A.shape[0]))]])
+        
+        m = A.shape[0]          # number of equalities
 
-        rhs = np.concatenate([-g, zeros])
-        solution = np.linalg.solve(KKT_mat, rhs)
-        n = g.size
-        return solution[:n], solution[n:]
+        if m == 0:
+            # No equalities: solve H p = -g
+            p = np.linalg.solve(H, -g)
+            w = np.empty((0,))  # empty dual vector
+            return p, w
+        else:
+            zeros = np.zeros(m)
+            KKT_mat = np.block([[H, A.T],
+                                [A, np.zeros((m, m))]])
+
+            rhs = np.concatenate([-g, zeros])
+            solution = np.linalg.solve(KKT_mat, rhs)
+            n = g.size
+            return solution[:n], solution[n:]
 
     def _log_barrier(self,
                      x: np.ndarray,
@@ -162,10 +191,10 @@ class constrainedMinimizer:
 
         vals = np.asarray(vals, dtype=float)
 
-        # Infeasible ⇒ +∞ so that line-search rejects
         if np.any(vals >= 0):
-            return np.inf, np.full_like(x, np.nan), np.full((len(x), len(x)), np.nan)
-
+        # Infeasible point → very high barrier value
+            return np.inf, np.zeros_like(x), np.zeros((len(x), len(x)))
+        
         inv_t = 1.0 / self.t
         phi = -inv_t * np.sum(np.log(-vals))
         gphi = inv_t * sum(grad / val for grad, val in zip(grads, vals))

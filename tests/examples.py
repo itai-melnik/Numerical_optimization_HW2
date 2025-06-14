@@ -112,8 +112,8 @@ def h4(x):
     # -y <= 0 
     return -x[1] , np.array([0.0, -1.0]), np.zeros((2, 2))
 
-# ineq_constraints = [h1, h2, h3, h4]
+ineq_constraints_lp = [h1, h2, h3, h4]
 
-# # A reasonable strictly‑feasible starting point for the interior‑point method
-# x0 = np.array([0.5, 0.75])
+# A reasonable strictly‑feasible starting point for the interior‑point method
+x0_lp = np.array([0.5, 0.75])
    
