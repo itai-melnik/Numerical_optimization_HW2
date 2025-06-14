@@ -23,37 +23,29 @@ class constrainedMinimizer:
     """
     
     def __init__(self,
-                 obj_tol=1e-12, 
-                 param_tol=1e-8, 
-                 max_iter=100, 
-                 t=1,
-                 mu=10, 
-                 rho=0.5, 
-                 c1=0.01,
-                 epsilon=1e-10) -> None:
-        
+             obj_tol: float = 1e-12,
+             param_tol: float = 1e-8,
+             max_iter: int = 100,
+             t0: float = 1.0,
+             mu: float = 10.0,
+             rho: float = 0.5,
+             c1: float = 0.01,
+             epsilon: float = 1e-10) -> None:
+
         
         self.obj_tol = obj_tol
         self.param_tol = param_tol
         self.max_iter = max_iter
         
-        # interior‑point parameters
-        self.t = t          # current barrier parameter
-        self.mu = mu        # factor used to increase t
-        
-        
-        #constants
-        self.rho = rho #backtracking constant
-        self.c1 = c1 #Wolfe condition
-        
-        
-        # interior‑point parameters
-        self.t = t          # current barrier parameter
-        self.mu = mu        # factor used to increase t
-        
-        
-        #tolerance for outer iterationa
+        # barrier parameters
+        self.t = t0
+        self.mu = mu
         self.epsilon = epsilon
+            
+        
+        # line search constants
+        self.rho = rho
+        self.c1  = c1
         
         
         #global x value
@@ -63,9 +55,7 @@ class constrainedMinimizer:
         self.prev_x = None
         self.prev_f_val = None
         
-        
-        
-        
+    
         #internal storage
         self.history: List[HistoryEntry] = []
         
@@ -149,8 +139,7 @@ class constrainedMinimizer:
             
             
     
-            
-            
+          
     ### helper methods ###
     
 
@@ -181,7 +170,7 @@ class constrainedMinimizer:
         """
         φ_t(x)   = -(1/t) Σ_i log(-g_i(x))
         ∇φ_t(x)  =  (1/t) Σ_i ∇g_i(x) / g_i(x)
-        ∇²φ_t(x) =  (1/t) Σ_i [ ∇g_i ∇g_iᵀ / g_i²  –  ∇²g_i / g_i ]
+        ∇²φ_t(x) =  (1/t) Σ_i [ ∇g_i ∇g_iᵀ / g_i²  -  ∇²g_i / g_i ]
         """
         vals, grads, hess_list = [], [], []
 
@@ -224,32 +213,27 @@ class constrainedMinimizer:
         
     
     
-    def _compute_direction(self, g, h) -> np.ndarray:
-        """compute pk"""
+    def _backtracking(self,
+                  x: np.ndarray,
+                  f_val: float,
+                  g: np.ndarray,
+                  p: np.ndarray,
+                  f: Callable[[np.ndarray], Tuple[float, np.ndarray, np.ndarray]]
+                  ) -> float:
         
-      #newton method
-      
-        try:
-            return -np.linalg.solve(h, g) #solves ax = b (gets x) h*p = -g since p = -g/h so we get p. AVOID computing inverse
-        except np.linalg.LinAlgError:
-            return -g
-        
-        
-              
-            
-         
-    
-    def _backtracking(self, x, f_val, g, p) -> float:
         """ used to compute alpha (the step size)"""
         
-        alpha = 1.0 #initial value
+        alpha = 1.0  #initial value
         
-        while self.f(x + alpha*p)[0] > f_val + self.c1*alpha*g.dot(p):
+        while True:
+            new_val, *_ = f(x + alpha * p)
+            
+            if new_val <= f_val + self.c1 * alpha * g.dot(p):
+                break
             alpha *= self.rho
             
             if alpha < 1e-12:
                 break
-            
             
         return alpha
         
@@ -266,60 +250,5 @@ class constrainedMinimizer:
         
         
         
-        
-    
-        
-        
-        
-    # def minimize(self) -> Tuple[np.ndarray, float]:
-        
-    #     bool_flag = False
-       
-            
-    #     for k in range(self.max_iter):
-            
-    #         f_val, g, h = self.f(self.x)
-            
-            
-    #         #save current iteration
-    #         self._save_history(k, f_val, g)
-            
-    #         #print to console:
-    #         print('iteration number:',k + 1 )
-    #         print('current location 𝑥𝑖:',self.x)
-    #         print('current objective value 𝑓(𝑥𝑖 ):',f_val )
-            
-    #         #break if stopping criteria met
-    #         if self._is_converged(k):
-    #             bool_flag = True
-    #             break
-            
-            
-    #         #compute p_k(the direction) changes depends on which method we use
-    #         p = self._compute_direction(g, h)
-            
-            
-    #         #computer alpha_k
-    #         alpha = self.backtracking(self.x, f_val, g, p )
-            
-    #         #update
-    #         x_new = self.x + alpha * p
-            
-            
-    #         #store previous values for stopping termination conditions 
-            
-    #         self.prev_x = self.x
-    #         self.prev_f_val = f_val
-            
-    
-    #         #x_(k+1) = x_new
-    #         self.x = x_new
-            
-              
-        
-    #     #returns final location, final value and bool flag
-    #     return self.x, self.history[-1].f, bool_flag
-            
-            
     
         
