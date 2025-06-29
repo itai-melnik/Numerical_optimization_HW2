@@ -27,6 +27,8 @@ from typing import Callable, List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 – enables 3‑D projection
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
@@ -139,15 +141,30 @@ def plot_feasible_and_path(
             dtype=bool,
         ).reshape(Xg.shape)
 
-        # Colour‑fill feasible region
+        # -----------------------------------------------------------------
+        # Shade only the feasible region (light‑blue) and outline it
+        # -----------------------------------------------------------------
         ax.contourf(
             Xg,
             Yg,
             feas.astype(float),
-            levels=[0.5, 1.5],
-            colors=["#e0e0e0"],
-            alpha=0.5,
+            levels=[0.5, 1.5],           # only fill the 1‑region
+            colors=["#cce5ff"],          # keep your original light‑blue
+            alpha=0.25,
         )
+        # Dashed purple boundary
+        ax.contour(
+            Xg,
+            Yg,
+            feas.astype(float),
+            levels=[0.5],
+            colors="purple",
+            linestyles="--",
+            linewidths=1.5,
+        )
+
+        # Add a legend handle so "Feasible Region" shows up in the legend
+        ax.fill([], [], color="#cce5ff", alpha=0.25, label="Feasible Region")
 
         # Draw central path
         ax.plot(

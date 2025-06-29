@@ -25,9 +25,9 @@ def qp_objective(x: np.ndarray):
         Hessian of f (constant for this quadratic).
     """
     
-    x, y, z = x
-    f_val = x ** 2 + y ** 2 + (z + 1) ** 2
-    grad = np.array([2 * x, 2 * y, 2 * (z + 1)], dtype=float)
+    x_val, y_val, z_val = x
+    f_val = x_val ** 2 + y_val ** 2 + (z_val + 1) ** 2
+    grad = np.array([2.0 * x_val, 2.0 * y_val, 2.0 * (z_val + 1)], dtype=float)
     hess = 2.0 * np.eye(3)
     return f_val, grad, hess
 
@@ -85,10 +85,10 @@ def lp_objective(x: np.ndarray):
     
    #Swap sign and minimize this function 
     
-    x, y = x
+    x_val, y_val = x
    
-    f_val = -(x+y)
-    grad = np.array([-1, -1], dtype=float)
+    f_val = -(x_val + y_val)
+    grad = np.array([-1.0, -1.0], dtype=float)
     hess = np.zeros(shape=(2,2))
     return f_val, grad, hess
 
@@ -105,15 +105,14 @@ def h2(x):
     return x[1] - 1, np.array([0.0, 1.0]), np.zeros((2, 2))
 
 def h3(x):
-    # x - 2 <= 0 
-    return x[1] - 2 , np.array([1.0, 0]), np.zeros((2, 2))
+    # x - 2 <= 0
+    return x[0] - 2, np.array([1.0, 0.0]), np.zeros((2, 2))
 
 def h4(x):
     # -y <= 0 
-    return -x[1] , np.array([0.0, -1.0]), np.zeros((2, 2))
+    return -x[1], np.array([0.0, -1.0]), np.zeros((2, 2))
 
 ineq_constraints_lp = [h1, h2, h3, h4]
 
 # A reasonable strictly‑feasible starting point for the interior‑point method
 x0_lp = np.array([0.5, 0.75])
-   

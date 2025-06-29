@@ -47,9 +47,7 @@ class TestConstrainedMinimizer(unittest.TestCase):
     
     def test_lp(self):
         
-        const_min = constrainedMinimizer(
-            max_iter = 5 # (inner)
-        )
+        const_min = constrainedMinimizer()
         
         x_star, f_star, _ = const_min.interior_pt(func=lp_objective, 
                                                      ineq_constraints=ineq_constraints_lp, 
@@ -64,11 +62,9 @@ class TestConstrainedMinimizer(unittest.TestCase):
             ineq_constraints_lp,
             None, None,
             hist,
-            xlim=(0, 3),          # <- pick limits that envelope the triangle
-            ylim=(0, 1.2),
             title="Central path (LP example)"
         )
-    
+        
         # (b) Objective value vs. outer iteration
         plot_objective_vs_outer(hist)
 
